@@ -1,0 +1,12 @@
+.env
+backend/target/
+frontend/node_modules/
+frontend/dist/
+.idea/
+*.iml
+.vscode/
+
+# Terraform
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate*
+deploy/terraform/terraform.tfvars

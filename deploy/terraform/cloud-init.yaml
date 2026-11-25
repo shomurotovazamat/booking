@@ -1,0 +1,36 @@
+#cloud-config
+# Первичная настройка ВМ: пользователь, Docker и (опционально) запуск проекта.
+users:
+  - name: ${vm_user}
+    groups: sudo
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+packages:
+  - git
+  - curl
+  - openssl
+
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - usermod -aG docker ${vm_user}
+%{ if repo_url != "" ~}
+  - git clone ${repo_url} /opt/booking-system
+  # Секреты генерируются на самой ВМ и в репозиторий не попадают
+  - |
+    cat > /opt/booking-system/.env <<EOF
+    POSTGRES_DB=booking
+    POSTGRES_USER=booking
+    POSTGRES_PASSWORD=$(openssl rand -hex 16)
+    ADMIN_TOKEN=$(openssl rand -hex 16)
+    GRAFANA_USER=admin
+    GRAFANA_PASSWORD=$(openssl rand -hex 8)
+    APP_TIMEZONE=Europe/Moscow
+    EOF
+  - chmod 600 /opt/booking-system/.env
+  - chown -R ${vm_user}:${vm_user} /opt/booking-system
+  - cd /opt/booking-system && docker compose up -d --build
+%{ endif ~}

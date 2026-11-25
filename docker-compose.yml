@@ -1,0 +1,88 @@
+name: booking-system
+
+services:
+  # 1. Frontend: React (статика) + Nginx как обратный прокси
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # 2. Backend: REST API на Spring Boot
+  backend:
+    build: ./backend
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-booking}
+      DB_USER: ${POSTGRES_USER:-booking}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в файле .env}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?задайте ADMIN_TOKEN в файле .env}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 3. База данных
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-booking}
+      POSTGRES_USER: ${POSTGRES_USER:-booking}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-booking} -d ${POSTGRES_DB:-booking}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # 4. Экспортёр метрик PostgreSQL для Prometheus
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      DATA_SOURCE_URI: postgres:5432/${POSTGRES_DB:-booking}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_USER:-booking}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 5. Prometheus: сбор метрик (наружу не публикуется, доступен через SSH-туннель)
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  # 6. Grafana: дашборды
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?задайте GRAFANA_PASSWORD в файле .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
