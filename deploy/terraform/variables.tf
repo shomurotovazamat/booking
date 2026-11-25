@@ -26,11 +26,6 @@ variable "ssh_public_key_path" {
   default     = "~/.ssh/id_ed25519.pub"
 }
 
-variable "ssh_allowed_cidrs" {
-  description = "Адреса, с которых разрешён SSH. Лучше указать свой IP: [\"203.0.113.5/32\"]"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-}
 
 variable "repo_url" {
   description = "URL публичного git-репозитория с проектом. Если задан, ВМ сама клонирует и запускает проект"

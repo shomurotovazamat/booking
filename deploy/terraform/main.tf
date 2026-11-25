@@ -29,37 +29,11 @@ resource "yandex_vpc_subnet" "booking" {
   v4_cidr_blocks = ["10.10.0.0/24"]
 }
 
-resource "yandex_vpc_security_group" "booking" {
-  name       = "booking-sg"
-  network_id = yandex_vpc_network.booking.id
-
-  ingress {
-    description    = "SSH"
-    protocol       = "TCP"
-    port           = 22
-    v4_cidr_blocks = var.ssh_allowed_cidrs
-  }
-
-  ingress {
-    description    = "HTTP: frontend + API"
-    protocol       = "TCP"
-    port           = 80
-    v4_cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description    = "Grafana"
-    protocol       = "TCP"
-    port           = 3000
-    v4_cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description    = "Исходящий трафик"
-    protocol       = "ANY"
-    v4_cidr_blocks = ["0.0.0.0/0"]
-  }
-}
+# Отдельная группа безопасности не создаётся: API Yandex Cloud отклонил
+# добавление входящих правил (PermissionDenied). ВМ получает группу
+# безопасности сети по умолчанию; наружу Docker публикует только порты 80 и 3000,
+# PostgreSQL и backend доступны только внутри сети Docker, Prometheus — только
+# на 127.0.0.1.
 
 # ---------- Виртуальная машина ----------
 
@@ -83,14 +57,13 @@ resource "yandex_compute_instance" "booking" {
     initialize_params {
       image_id = data.yandex_compute_image.ubuntu.id
       size     = 20
-      type     = "network-ssd"
+      type     = "network-hdd"
     }
   }
 
   network_interface {
-    subnet_id          = yandex_vpc_subnet.booking.id
-    nat                = true
-    security_group_ids = [yandex_vpc_security_group.booking.id]
+    subnet_id = yandex_vpc_subnet.booking.id
+    nat       = true
   }
 
   scheduling_policy {
